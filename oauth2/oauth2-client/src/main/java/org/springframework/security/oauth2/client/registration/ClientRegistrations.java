@@ -104,8 +104,14 @@ public final class ClientRegistrations {
 	 * Provider Configuration.
 	 */
 	public static ClientRegistration.Builder fromOidcIssuerLocation(String issuer) {
+		return fromOidcIssuerLocation(issuer, null);
+	}
+
+    public static ClientRegistration.Builder fromOidcIssuerLocation(String issuer, String metadataIssuer) {
 		Assert.hasText(issuer, "issuer cannot be empty");
-		return getBuilder(issuer, oidc(URI.create(issuer)));
+        URI uri = URI.create(issuer);
+        URI metadataUri = metadataIssuer != null ? URI.create(metadataIssuer) : uri;
+		return getBuilder(issuer, oidc(uri, metadataUri));
 	}
 
 	/**
@@ -147,12 +153,17 @@ public final class ClientRegistrations {
 	 * described endpoints
 	 */
 	public static ClientRegistration.Builder fromIssuerLocation(String issuer) {
-		Assert.hasText(issuer, "issuer cannot be empty");
-		URI uri = URI.create(issuer);
-		return getBuilder(issuer, oidc(uri), oidcRfc8414(uri), oauth(uri));
+		return fromIssuerLocation(issuer, null);
 	}
 
-	private static Supplier<ClientRegistration.Builder> oidc(URI issuer) {
+    public static ClientRegistration.Builder fromIssuerLocation(String issuer, String metadataIssuer) {
+		Assert.hasText(issuer, "issuer cannot be empty");
+		URI uri = URI.create(issuer);
+        URI metadataUri = metadataIssuer != null ? URI.create(metadataIssuer) : uri;
+		return getBuilder(issuer, oidc(uri, metadataUri), oidcRfc8414(uri, metadataUri), oauth(uri, metadataUri));
+	}
+
+	private static Supplier<ClientRegistration.Builder> oidc(URI issuer, URI metadataIssuer) {
 		// @formatter:off
 		URI uri = UriComponentsBuilder.fromUri(issuer)
 				.replacePath(issuer.getPath() + OIDC_METADATA_PATH)
@@ -162,7 +173,7 @@ public final class ClientRegistrations {
 			RequestEntity<Void> request = RequestEntity.get(uri).build();
 			Map<String, Object> configuration = rest.exchange(request, typeReference).getBody();
 			OIDCProviderMetadata metadata = parse(configuration, OIDCProviderMetadata::parse);
-			ClientRegistration.Builder builder = withProviderConfiguration(metadata, issuer.toASCIIString())
+			ClientRegistration.Builder builder = withProviderConfiguration(metadata, metadataIssuer.toASCIIString())
 				.jwkSetUri(metadata.getJWKSetURI().toASCIIString());
 			if (metadata.getUserInfoEndpointURI() != null) {
 				builder.userInfoUri(metadata.getUserInfoEndpointURI().toASCIIString());
@@ -171,30 +182,30 @@ public final class ClientRegistrations {
 		};
 	}
 
-	private static Supplier<ClientRegistration.Builder> oidcRfc8414(URI issuer) {
+	private static Supplier<ClientRegistration.Builder> oidcRfc8414(URI issuer, URI metadataIssuer) {
 		// @formatter:off
 		URI uri = UriComponentsBuilder.fromUri(issuer)
 				.replacePath(OIDC_METADATA_PATH + issuer.getPath())
 				.build(Collections.emptyMap());
 		// @formatter:on
-		return getRfc8414Builder(issuer, uri);
+		return getRfc8414Builder(issuer, uri, metadataIssuer);
 	}
 
-	private static Supplier<ClientRegistration.Builder> oauth(URI issuer) {
+	private static Supplier<ClientRegistration.Builder> oauth(URI issuer, URI metadataIssuer) {
 		// @formatter:off
 		URI uri = UriComponentsBuilder.fromUri(issuer)
 				.replacePath(OAUTH_METADATA_PATH + issuer.getPath())
 				.build(Collections.emptyMap());
 		// @formatter:on
-		return getRfc8414Builder(issuer, uri);
+		return getRfc8414Builder(issuer, uri, metadataIssuer);
 	}
 
-	private static Supplier<ClientRegistration.Builder> getRfc8414Builder(URI issuer, URI uri) {
+	private static Supplier<ClientRegistration.Builder> getRfc8414Builder(URI issuer, URI uri, URI metadataIssuer) {
 		return () -> {
 			RequestEntity<Void> request = RequestEntity.get(uri).build();
 			Map<String, Object> configuration = rest.exchange(request, typeReference).getBody();
 			AuthorizationServerMetadata metadata = parse(configuration, AuthorizationServerMetadata::parse);
-			ClientRegistration.Builder builder = withProviderConfiguration(metadata, issuer.toASCIIString());
+			ClientRegistration.Builder builder = withProviderConfiguration(metadata, metadataIssuer.toASCIIString());
 			URI jwkSetUri = metadata.getJWKSetURI();
 			if (jwkSetUri != null) {
 				builder.jwkSetUri(jwkSetUri.toASCIIString());
